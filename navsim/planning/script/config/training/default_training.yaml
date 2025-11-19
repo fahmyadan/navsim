@@ -49,3 +49,13 @@ trainer:
     gradient_clip_val: 0.0  # value to clip gradients
     gradient_clip_algorithm: norm  # [value, norm] method to clip gradients
     default_root_dir: ${output_dir}
+  
+  logger:
+    _target_: lightning.pytorch.loggers.WandbLogger
+    name: ${experiment_name}
+    project: end2end
+    save_dir: ${output_dir}
+    log_model: true     # optional: logs checkpoints to wandb
+    # offline: false      # set true if running without WANDB internet
+    # entity: null        # optional: your W&B team/org
+

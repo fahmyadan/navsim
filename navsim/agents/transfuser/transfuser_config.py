@@ -108,6 +108,8 @@ class TransfuserConfig:
     bev_features_channels: int = 64
     bev_down_sample_factor: int = 4
     bev_upsample_factor: int = 2
+    train_metric_cache_path: str = None 
+    pdm_score: bool = True
 
     @property
     def bev_semantic_frame(self) -> Tuple[int, int]:

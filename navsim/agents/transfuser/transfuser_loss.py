@@ -26,7 +26,11 @@ def transfuser_loss(targets: Dict[str, torch.Tensor], predictions: Dict[str, tor
         + config.agent_box_weight * agent_box_loss
         + config.bev_semantic_weight * bev_semantic_loss
     )
-    return loss
+    loss_dict = {'loss/traj': trajectory_loss, 
+                "loss/classification": agent_class_loss,
+                "loss/bbox": agent_box_loss,
+                "loss/bev": bev_semantic_loss}
+    return loss, loss_dict
 
 
 def _agent_loss(targets: Dict[str, torch.Tensor], predictions: Dict[str, torch.Tensor], config: TransfuserConfig):

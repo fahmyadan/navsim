@@ -5,7 +5,7 @@ from typing import Tuple
 import hydra
 import pytorch_lightning as pl
 from hydra.utils import instantiate
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import DataLoader
 
 from navsim.agents.abstract_agent import AbstractAgent
@@ -13,7 +13,7 @@ from navsim.common.dataclasses import SceneFilter
 from navsim.common.dataloader import SceneLoader
 from navsim.planning.training.agent_lightning_module import AgentLightningModule
 from navsim.planning.training.dataset import CacheOnlyDataset, Dataset
-
+from navsim.planning.training.callbacks.wandb_callback import LogConfigCallback
 logger = logging.getLogger(__name__)
 
 CONFIG_PATH = "config/training"
@@ -128,7 +128,11 @@ def main(cfg: DictConfig) -> None:
     logger.info("Num validation samples: %d", len(val_data))
 
     logger.info("Building Trainer")
-    trainer = pl.Trainer(**cfg.trainer.params, callbacks=agent.get_training_callbacks())
+    wandb_logger = instantiate(cfg.trainer.logger)
+    wandb_callback = LogConfigCallback(cfg)
+    trainer = pl.Trainer(**cfg.trainer.params, 
+                        callbacks=[*agent.get_training_callbacks(), wandb_callback], 
+                        logger=wandb_logger)
 
     logger.info("Starting Training")
     trainer.fit(
