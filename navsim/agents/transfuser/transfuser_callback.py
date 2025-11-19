@@ -45,20 +45,20 @@ class TransfuserCallback(pl.Callback):
 
     def on_validation_epoch_end(self, trainer: pl.Trainer, lightning_module: pl.LightningModule) -> None:
         """Inherited, see superclass."""
-        device = lightning_module.device
-        for idx_plot in range(self._num_plots):
-            features, targets = next(iter(trainer.val_dataloaders))
-            features, targets = dict_to_device(features, device), dict_to_device(targets, device)
-            with torch.no_grad():
-                predictions = lightning_module.agent.forward(features)
+        # device = lightning_module.device
+        # for idx_plot in range(self._num_plots):
+        #     features, targets = next(iter(trainer.val_dataloaders))
+        #     features, targets = dict_to_device(features, device), dict_to_device(targets, device)
+        #     with torch.no_grad():
+        #         predictions = lightning_module.agent.forward(features)
 
-            features, targets, predictions = (
-                dict_to_device(features, "cpu"),
-                dict_to_device(targets, "cpu"),
-                dict_to_device(predictions, "cpu"),
-            )
-            grid = self._visualize_model(features, targets, predictions)
-            trainer.logger.experiment.add_image(f"val_plot_{idx_plot}", grid, global_step=trainer.current_epoch)
+        #     features, targets, predictions = (
+        #         dict_to_device(features, "cpu"),
+        #         dict_to_device(targets, "cpu"),
+        #         dict_to_device(predictions, "cpu"),
+        #     )
+        #     grid = self._visualize_model(features, targets, predictions)
+        #     trainer.logger.experiment.add_image(f"val_plot_{idx_plot}", grid, global_step=trainer.current_epoch)
 
     def on_test_epoch_start(self, trainer: pl.Trainer, lightning_module: pl.LightningModule) -> None:
         """Inherited, see superclass."""
@@ -74,20 +74,20 @@ class TransfuserCallback(pl.Callback):
     ) -> None:
         """Inherited, see superclass."""
 
-        device = lightning_module.device
-        for idx_plot in range(self._num_plots):
-            features, targets = next(iter(trainer.train_dataloader))
-            features, targets = dict_to_device(features, device), dict_to_device(targets, device)
-            with torch.no_grad():
-                predictions = lightning_module.agent.forward(features)
+        # device = lightning_module.device
+        # for idx_plot in range(self._num_plots):
+        #     features, targets = next(iter(trainer.train_dataloader))
+        #     features, targets = dict_to_device(features, device), dict_to_device(targets, device)
+        #     with torch.no_grad():
+        #         predictions = lightning_module.agent.forward(features)
 
-            features, targets, predictions = (
-                dict_to_device(features, "cpu"),
-                dict_to_device(targets, "cpu"),
-                dict_to_device(predictions, "cpu"),
-            )
-            grid = self._visualize_model(features, targets, predictions)
-            trainer.logger.experiment.add_image(f"train_plot_{idx_plot}", grid, global_step=trainer.current_epoch)
+        #     features, targets, predictions = (
+        #         dict_to_device(features, "cpu"),
+        #         dict_to_device(targets, "cpu"),
+        #         dict_to_device(predictions, "cpu"),
+        #     )
+        #     grid = self._visualize_model(features, targets, predictions)
+        #     trainer.logger.experiment.add_image(f"train_plot_{idx_plot}", grid, global_step=trainer.current_epoch)
 
     def _visualize_model(
         self,
