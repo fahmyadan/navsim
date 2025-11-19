@@ -155,6 +155,7 @@ class TransfuserTargetBuilder(AbstractTargetBuilder):
             "agent_states": agent_states,
             "agent_labels": agent_labels,
             "bev_semantic_map": bev_semantic_map,
+            "token": scene.scene_metadata.initial_token
         }
 
     def _compute_agent_targets(self, annotations: Annotations) -> Tuple[torch.Tensor, torch.Tensor]:
