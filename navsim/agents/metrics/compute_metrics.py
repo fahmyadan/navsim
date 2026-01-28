@@ -75,12 +75,12 @@ def get_sub_score(simulator, config, scorer, metric_cache,poses,test):
 
     no_at_fault_collisions = scorer._multi_metrics[MultiMetricIndex.NO_COLLISION, :]
     drivable_area_compliance = scorer._multi_metrics[MultiMetricIndex.DRIVABLE_AREA, :]
-    #driving_direction_compliance = scorer._multi_metrics[MultiMetricIndex.DRIVING_DIRECTION, :  ]
+    driving_direction_compliance = scorer._multi_metrics[MultiMetricIndex.DRIVING_DIRECTION, :  ]
 
     ego_progress = scorer._weighted_metrics[WeightedMetricIndex.PROGRESS, :]
     time_to_collision_within_bound = scorer._weighted_metrics[WeightedMetricIndex.TTC, :]
     comfort = scorer._weighted_metrics[WeightedMetricIndex.HISTORY_COMFORT, :]
-
+    lane_keeping = scorer._weighted_metrics[WeightedMetricIndex.LANE_KEEPING, :]
 
     scores=np.stack([no_at_fault_collisions,drivable_area_compliance,#driving_direction_compliance,
                      ego_progress,time_to_collision_within_bound,comfort #,final_scores
@@ -125,8 +125,21 @@ def get_sub_score(simulator, config, scorer, metric_cache,poses,test):
         key_agent_corners[...,1]-=origin_y
 
         key_agent_corners=key_agent_corners.dot(mat)
-    eval_res = {"scores": scores,
-            "key_agent_corners": key_agent_corners, 
-            "key_agent_labels": key_agent_labels,
-            "ego_areas": ego_areas}
+    eval_res = {
+        "scores": scores,
+        "key_agent_corners": key_agent_corners, 
+        "key_agent_labels": key_agent_labels,
+        "ego_areas": ego_areas,
+        # Individual PDMS components:
+        "no_at_fault_collisions": no_at_fault_collisions,
+        "drivable_area_compliance": drivable_area_compliance,
+        "driving_direction_compliance": driving_direction_compliance,
+        # "traffic_light_compliance": traffic_light_compliance,
+        "ego_progress": ego_progress,
+        "time_to_collision": time_to_collision_within_bound,
+        "lane_keeping": lane_keeping,
+        "history_comfort": comfort,
+        # Final PDM score (from scorer)
+        "pdm_score": final_scores[0]["pdm_score"].values[0] if len(final_scores) > 0 else 0.0,
+    }
     return eval_res

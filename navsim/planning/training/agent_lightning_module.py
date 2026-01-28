@@ -8,6 +8,7 @@ from navsim.common.dataloader import MetricCacheLoader
 from navsim.agents.metrics.compute_metrics import get_scores
 from pathlib import Path
 from functools import partial
+import numpy as np
 
 class AgentLightningModule(pl.LightningModule):
     """Pytorch lightning wrapper for learnable agent."""
@@ -44,6 +45,11 @@ class AgentLightningModule(pl.LightningModule):
         if logging_prefix == 'val':
             #compute PDMS
             score_res = self.compute_scores(targets,prediction['trajectory'])
+            batch_size = len(targets["token"])
+            for name, val in score_res.items():
+                self.log(f"{logging_prefix}/{name}", val, on_step=False, 
+                on_epoch=True, sync_dist=True, batch_size=batch_size)
+            
         return loss
 
     def training_step(self, batch: Tuple[Dict[str, Tensor], Dict[str, Tensor]], batch_idx: int) -> Tensor:
@@ -88,5 +94,52 @@ class AgentLightningModule(pl.LightningModule):
 
         
         all_res = self.get_scores(data_points)
+        agg_scores = self.aggregate_scores(all_res)
 
-        return all_res
+        return agg_scores
+    
+    def aggregate_scores(self, all_res: list[dict]) -> dict:
+        """
+        Aggregate PDM scores from a batch for logging.
+        
+        Args:
+            all_res: List of dicts from compute_scores, length = batch_size
+        
+        Returns:
+            Dict with aggregated metrics ready for wandb logging
+        """
+        # Stack the scores array from each result: (batch_size, num_metrics)
+        scores = np.stack([res["scores"] for res in all_res], axis=0)
+        
+        # scores shape: (batch_size, 1, num_metrics) -> squeeze to (batch_size, num_metrics)
+        if scores.ndim == 3:
+            scores = scores.squeeze(1)
+        
+        # Define metric names (must match the order in compute_metrics.py)
+        metric_names = [
+            "no_at_fault_collisions",
+            "drivable_area_compliance",
+            # "driving_direction_compliance",  # uncomment if you added this
+            "ego_progress",
+            "time_to_collision",
+            "comfort",
+        ]
+        
+        # Compute mean for each metric
+        aggregated = {}
+        for i, name in enumerate(metric_names):
+            aggregated[f"{name}"] = scores[:, i].mean()
+        
+
+        # Extract actual PDM scores from each result
+        pdm_scores = np.array([res["pdm_score"] for res in all_res])
+        aggregated["pdm_score"] = pdm_scores.mean()
+
+        # Overall metrics
+        aggregated["mean_score"] = scores.mean()
+        
+        # Optional: track failure rates (useful for multiplier metrics)
+        aggregated["collision_rate"] = (scores[:, 0] < 1.0).mean()
+        aggregated["off_road_rate"] = (scores[:, 1] < 1.0).mean()
+        
+        return aggregated
