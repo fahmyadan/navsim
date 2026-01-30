@@ -39,9 +39,10 @@ class AgentLightningModule(pl.LightningModule):
         features, targets = batch
         prediction = self.agent.forward(features)
         loss, loss_dict = self.agent.compute_loss(features, targets, prediction)
-        self.log(f"{logging_prefix}/loss", loss, on_step=True, on_epoch=True, prog_bar=True, sync_dist=True)
+        is_training = (logging_prefix == "train")
+        self.log(f"{logging_prefix}/loss", loss, on_step=is_training, on_epoch=True, prog_bar=True, sync_dist=True)
         for name, val in loss_dict.items():
-            self.log(f"{logging_prefix}/{name}", val, on_step=True, on_epoch=True, prog_bar=True, sync_dist=True)
+            self.log(f"{logging_prefix}/{name}", val, on_step=is_training, on_epoch=True, prog_bar=True, sync_dist=True)
         if logging_prefix == 'val':
             #compute PDMS
             score_res = self.compute_scores(targets,prediction['trajectory'])

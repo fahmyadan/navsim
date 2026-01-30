@@ -1,11 +1,12 @@
 import logging
 from pathlib import Path
 from typing import Tuple
-
+import os
 import hydra
 import pytorch_lightning as pl
 from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
+from tensorflow.python.eager.context import check_alive
 from torch.utils.data import DataLoader
 
 from navsim.agents.abstract_agent import AbstractAgent
@@ -130,8 +131,12 @@ def main(cfg: DictConfig) -> None:
     logger.info("Building Trainer")
     wandb_logger = instantiate(cfg.trainer.logger)
     wandb_callback = LogConfigCallback(cfg)
+    checkpoint_callback = instantiate(cfg.checkpoint)
+    checkpoint_callback.dirpath = os.path.join(checkpoint_callback.dirpath, agent.name(), "checkpoints")
+    checkpoint_callback.filename =  agent.name() + "_" + cfg.experiment_name +"_" + checkpoint_callback.filename
+
     trainer = pl.Trainer(**cfg.trainer.params, 
-                        callbacks=[*agent.get_training_callbacks(), wandb_callback], 
+                        callbacks=[*agent.get_training_callbacks(), wandb_callback, checkpoint_callback], 
                         logger=wandb_logger)
 
     logger.info("Starting Training")
