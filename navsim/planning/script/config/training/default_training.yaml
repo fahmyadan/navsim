@@ -65,7 +65,7 @@ checkpoint:
   filename: "{epoch}"
   save_last: true
   verbose: true
-  every_n_epochs: 1
+  every_n_epochs: ${trainer.params.check_val_every_n_epoch} 
   save_top_k: 3  
   monitor: val/loss
   save_weights_only: false
