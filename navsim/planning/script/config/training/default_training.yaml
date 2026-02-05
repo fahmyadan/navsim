@@ -61,7 +61,7 @@ trainer:
 
 checkpoint:
   _target_: pytorch_lightning.callbacks.ModelCheckpoint
-  dirpath: ${oc.env:OPENSCENE_DATA_ROOT}
+  dirpath: ${output_dir}
   filename: "{epoch}"
   save_last: true
   verbose: true
