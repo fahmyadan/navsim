@@ -47,10 +47,16 @@ class AgentLightningModule(pl.LightningModule):
             #compute PDMS
             score_res = self.compute_scores(targets,prediction['trajectory'])
             batch_size = len(targets["token"])
-            for name, val in score_res.items():
+            # Compute ADE at specific time intervals (1s, 2s, 3s, 4s)
+            ade_metrics = self.agent.compute_ade(
+                prediction["trajectory"], 
+                targets["trajectory"], 
+                time_intervals=[1.0, 2.0, 4.0]
+            )
+            metrics = score_res | ade_metrics
+            for name, val in metrics.items():
                 self.log(f"{logging_prefix}/{name}", val, on_step=False, 
                 on_epoch=True, sync_dist=True, batch_size=batch_size)
-            
         return loss
 
     def training_step(self, batch: Tuple[Dict[str, Tensor], Dict[str, Tensor]], batch_idx: int) -> Tensor:

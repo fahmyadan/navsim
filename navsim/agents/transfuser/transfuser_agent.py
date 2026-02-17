@@ -15,6 +15,8 @@ from navsim.agents.transfuser.transfuser_model import TransfuserModel
 from navsim.common.dataclasses import SensorConfig
 from navsim.planning.training.abstract_feature_target_builder import AbstractFeatureBuilder, AbstractTargetBuilder
 
+from pytorch_lightning.callbacks import LearningRateMonitor
+
 
 class TransfuserAgent(AbstractAgent):
     """Agent interface for TransFuser baseline."""
@@ -23,6 +25,7 @@ class TransfuserAgent(AbstractAgent):
         self,
         config: TransfuserConfig,
         lr: float,
+        max_epochs: int, 
         checkpoint_path: Optional[str] = None,
         trajectory_sampling: TrajectorySampling = TrajectorySampling(time_horizon=4, interval_length=0.5),
     ):
@@ -37,6 +40,7 @@ class TransfuserAgent(AbstractAgent):
 
         self._config = config
         self._lr = lr
+        self.max_epochs = max_epochs
 
         self._checkpoint_path = checkpoint_path
         self._transfuser_model = TransfuserModel(self._trajectory_sampling, config)
@@ -96,8 +100,12 @@ class TransfuserAgent(AbstractAgent):
         self,
     ) -> Union[Optimizer, Dict[str, Union[Optimizer, LRScheduler]]]:
         """Inherited, see superclass."""
-        return torch.optim.Adam(self._transfuser_model.parameters(), lr=self._lr)
+        optimizer =  torch.optim.AdamW(self._transfuser_model.parameters(), lr=self._lr, weight_decay=1e-4)
+        lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max = self.max_epochs)
+        
+        return  {"optimizer":optimizer, "lr_scheduler":lr_scheduler}
 
     def get_training_callbacks(self) -> List[pl.Callback]:
         """Inherited, see superclass."""
-        return [TransfuserCallback(self._config)]
+        lr_monitor = LearningRateMonitor(logging_interval='step')
+        return [TransfuserCallback(self._config), lr_monitor]
