@@ -79,7 +79,9 @@ class AgentLightningModule(pl.LightningModule):
 
     def configure_optimizers(self):
         """Inherited, see superclass."""
-        return self.agent.get_optimizers()
+        total_steps = self.trainer.estimated_stepping_batches
+        print(f"DEBUG: Total Stepping Batches = {total_steps}")
+        return self.agent.get_optimizers(total_steps)
     
     def compute_scores(self, targets:Dict[str,Any], proposals:Tensor, test=True):
         if self.agent.training:

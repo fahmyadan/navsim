@@ -95,7 +95,7 @@ class AbstractAgent(torch.nn.Module, ABC):
         raise NotImplementedError("No loss. Agent does not support training.")
 
     def get_optimizers(
-        self,
+        self, estimate_stepping_batches: int, 
     ) -> Union[torch.optim.Optimizer, Dict[str, Union[torch.optim.Optimizer, torch.optim.lr_scheduler.LRScheduler]],]:
         """
         Returns the optimizers that are used by thy pytorch-lightning trainer.

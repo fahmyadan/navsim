@@ -97,13 +97,17 @@ class TransfuserAgent(AbstractAgent):
         return transfuser_loss(targets, predictions, self._config)
 
     def get_optimizers(
-        self,
+        self,estimated_stepping_batches:int,
     ) -> Union[Optimizer, Dict[str, Union[Optimizer, LRScheduler]]]:
         """Inherited, see superclass."""
         optimizer =  torch.optim.AdamW(self._transfuser_model.parameters(), lr=self._lr, weight_decay=1e-4)
-        lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max = self.max_epochs)
+        lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max = estimated_stepping_batches)
         
-        return  {"optimizer":optimizer, "lr_scheduler":lr_scheduler}
+        return  {"optimizer":optimizer, "lr_scheduler": {
+            "scheduler": lr_scheduler,
+            "interval": "step", 
+            "frequency": 1,
+        }}
 
     def get_training_callbacks(self) -> List[pl.Callback]:
         """Inherited, see superclass."""
