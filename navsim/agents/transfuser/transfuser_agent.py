@@ -1,6 +1,7 @@
 from typing import Any, Dict, List, Optional, Union
 
 import pytorch_lightning as pl
+from tensorflow.python.profiler.profiler_v2 import warmup
 import torch
 from nuplan.planning.simulation.trajectory.trajectory_sampling import TrajectorySampling
 from torch.optim import Optimizer
@@ -26,6 +27,7 @@ class TransfuserAgent(AbstractAgent):
         config: TransfuserConfig,
         lr: float,
         max_epochs: int, 
+        warmup_steps: int, 
         checkpoint_path: Optional[str] = None,
         trajectory_sampling: TrajectorySampling = TrajectorySampling(time_horizon=4, interval_length=0.5),
     ):
@@ -41,6 +43,7 @@ class TransfuserAgent(AbstractAgent):
         self._config = config
         self._lr = lr
         self.max_epochs = max_epochs
+        self.warmup_steps = warmup_steps
 
         self._checkpoint_path = checkpoint_path
         self._transfuser_model = TransfuserModel(self._trajectory_sampling, config)
@@ -101,8 +104,15 @@ class TransfuserAgent(AbstractAgent):
     ) -> Union[Optimizer, Dict[str, Union[Optimizer, LRScheduler]]]:
         """Inherited, see superclass."""
         optimizer =  torch.optim.AdamW(self._transfuser_model.parameters(), lr=self._lr, weight_decay=1e-4)
-        lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max = estimated_stepping_batches)
-        
+        linear_scheduler = torch.optim.lr_scheduler.LinearLR(optimizer,start_factor=0.01, total_iters=self.warmup_steps)
+        cosine_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, 
+                            T_max = estimated_stepping_batches- self.warmup_steps, 
+                            eta_min=1e-6)
+        lr_scheduler = torch.optim.lr_scheduler.SequentialLR(
+        optimizer, 
+        schedulers=[linear_scheduler, cosine_scheduler], 
+        milestones=[self.warmup_steps]
+    )
         return  {"optimizer":optimizer, "lr_scheduler": {
             "scheduler": lr_scheduler,
             "interval": "step", 
