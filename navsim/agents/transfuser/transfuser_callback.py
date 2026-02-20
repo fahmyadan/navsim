@@ -10,7 +10,7 @@ from nuplan.common.actor_state.oriented_box import OrientedBox
 from nuplan.common.actor_state.state_representation import StateSE2
 from nuplan.common.maps.abstract_map import SemanticMapLayer
 from PIL import ImageColor
-
+import wandb
 from navsim.agents.transfuser.transfuser_config import TransfuserConfig
 from navsim.agents.transfuser.transfuser_features import BoundingBox2DIndex
 from navsim.visualization.config import AGENT_CONFIG, MAP_LAYER_CONFIG
@@ -45,20 +45,34 @@ class TransfuserCallback(pl.Callback):
 
     def on_validation_epoch_end(self, trainer: pl.Trainer, lightning_module: pl.LightningModule) -> None:
         """Inherited, see superclass."""
-        # device = lightning_module.device
-        # for idx_plot in range(self._num_plots):
-        #     features, targets = next(iter(trainer.val_dataloaders))
-        #     features, targets = dict_to_device(features, device), dict_to_device(targets, device)
-        #     with torch.no_grad():
-        #         predictions = lightning_module.agent.forward(features)
+        device = lightning_module.device
+        # Collect all plots and log them in a single call to avoid step conflicts
+        images_to_log = {}
+        
+        for idx_plot in range(self._num_plots):
+            features, targets = next(iter(trainer.val_dataloaders))
+            features, targets = dict_to_device(features, device), dict_to_device(targets, device)
+            with torch.no_grad():
+                predictions = lightning_module.agent.forward(features)
 
-        #     features, targets, predictions = (
-        #         dict_to_device(features, "cpu"),
-        #         dict_to_device(targets, "cpu"),
-        #         dict_to_device(predictions, "cpu"),
-        #     )
-        #     grid = self._visualize_model(features, targets, predictions)
-        #     trainer.logger.experiment.add_image(f"val_plot_{idx_plot}", grid, global_step=trainer.current_epoch)
+            features, targets, predictions = (
+                dict_to_device(features, "cpu"),
+                dict_to_device(targets, "cpu"),
+                dict_to_device(predictions, "cpu"),
+            )
+            grid = self._visualize_model(features, targets, predictions)
+            # Convert grid from (C, H, W) to (H, W, C) for wandb.Image
+            # vutils.make_grid returns tensor in channels-first format (C, H, W)
+            # wandb.Image expects numpy array in channels-last format (H, W, C)
+            grid_numpy = grid.numpy().transpose(1, 2, 0)
+            images_to_log[f"val_plot_{idx_plot}"] = wandb.Image(grid_numpy)
+        
+        # Log all images at once using global_step to match wandb's step counter
+        # This ensures images are logged at the same step as validation metrics
+        # and avoids step conflicts when logging multiple images
+        if images_to_log:
+            trainer.logger.experiment.log(images_to_log, step=trainer.global_step, commit=True)
+            # trainer.logger.experiment.log(f"val_plot_{idx_plot}", grid, global_step=trainer.current_epoch)
 
     def on_test_epoch_start(self, trainer: pl.Trainer, lightning_module: pl.LightningModule) -> None:
         """Inherited, see superclass."""
@@ -104,7 +118,7 @@ class TransfuserCallback(pl.Callback):
         """
         camera = features["camera_feature"].permute(0, 2, 3, 1).numpy()
         bev = targets["bev_semantic_map"].numpy()
-        lidar_map = features["lidar_feature"].squeeze(1).numpy()
+        # lidar_map = features["lidar_feature"].squeeze(1).numpy()
         agent_labels = targets["agent_labels"].numpy()
         agent_states = targets["agent_states"].numpy()
         trajectory = targets["trajectory"].numpy()
@@ -124,14 +138,39 @@ class TransfuserCallback(pl.Callback):
 
             agent_states_ = agent_states[sample_idx][agent_labels[sample_idx]]
             pred_agent_states_ = pred_agent_states[sample_idx][pred_agent_labels[sample_idx] > 0.5]
-            plot[:, 512:] = lidar_map_to_rgb(
-                lidar_map[sample_idx],
-                agent_states_,
-                pred_agent_states_,
-                trajectory[sample_idx],
-                pred_trajectory[sample_idx],
-                self._config,
-            )
+            # plot[:, 512:] = lidar_map_to_rgb(
+            #     lidar_map[sample_idx],
+            #     agent_states_,
+            #     pred_agent_states_,
+            #     trajectory[sample_idx],
+            #     pred_trajectory[sample_idx],
+            #     self._config,
+            # )
+
+            # Add text labels to distinguish GT and predicted
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            font_scale = 0.6
+            thickness = 2
+            color = (255, 255, 255)  # White text
+            bg_color = (0, 0, 0)  # Black background for text
+            
+            # Add "Camera" label
+            text = "Camera"
+            (text_width, text_height), baseline = cv2.getTextSize(text, font, font_scale, thickness)
+            cv2.rectangle(plot, (5, 5), (text_width + 10, text_height + baseline + 10), bg_color, -1)
+            cv2.putText(plot, text, (10, text_height + 10), font, font_scale, color, thickness)
+            
+            # Add "GT BEV" label
+            text = "GT BEV"
+            (text_width, text_height), baseline = cv2.getTextSize(text, font, font_scale, thickness)
+            cv2.rectangle(plot, (5, 133), (text_width + 10, 133 + text_height + baseline + 10), bg_color, -1)
+            cv2.putText(plot, text, (10, 133 + text_height + 10), font, font_scale, color, thickness)
+            
+            # Add "Pred BEV" label
+            text = "Pred BEV"
+            (text_width, text_height), baseline = cv2.getTextSize(text, font, font_scale, thickness)
+            cv2.rectangle(plot, (261, 133), (261 + text_width + 10, 133 + text_height + baseline + 10), bg_color, -1)
+            cv2.putText(plot, text, (266, 133 + text_height + 10), font, font_scale, color, thickness)
 
             plots.append(torch.tensor(plot).permute(2, 0, 1))
 
@@ -146,7 +185,7 @@ def dict_to_device(dict: Dict[str, torch.Tensor], device: Union[torch.device, st
     :return: dictionary with tensors on specified device
     """
     for key in dict.keys():
-        dict[key] = dict[key].to(device)
+        dict[key] = dict[key].to(device) if isinstance(dict[key], torch.Tensor) else dict[key]
     return dict
 
 
@@ -190,12 +229,13 @@ def lidar_map_to_rgb(
     :param lidar_map: lidar histogram raster
     :param agent_states: target agent bounding box states
     :param pred_agent_states: predicted agent bounding box states
-    :param trajectory: target trajectory of human operator
-    :param pred_trajectory: predicted trajectory of agent
+    :param trajectory: target trajectory of human operator (ego GT trajectory)
+    :param pred_trajectory: predicted trajectory of agent (ego predicted trajectory)
     :param config: global config dataclass of TransFuser
     :return: RGB image for training visualization
     """
-    gt_color, pred_color = (0, 255, 0), (255, 0, 0)
+    # Ego trajectory colors: GT is RED, predicted is BLUE
+    gt_color, pred_color = (255, 0, 0), (0, 0, 255)  # RED for GT ego, BLUE for predicted ego
     point_size = 4
 
     height, width = lidar_map.shape[:2]
