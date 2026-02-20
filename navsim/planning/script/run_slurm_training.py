@@ -323,6 +323,7 @@ def main(cfg: DictConfig) -> None:
         # [FIX ISSUE 1] Only add callback if we don't have an ID yet
         if not wandb_resume_id and rank == 0:
              callbacks.append(UpdateMetadataCallback(metadata_dir, slurm_job_id))
+             callbacks.append(LogConfigCallback(cfg))
     else: 
         #no logging 
         wandb_callback = None
