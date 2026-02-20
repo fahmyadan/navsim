@@ -138,12 +138,21 @@ def main(cfg: DictConfig) -> None:
     trainer = pl.Trainer(**cfg.trainer.params, 
                         callbacks=[*agent.get_training_callbacks(), wandb_callback, checkpoint_callback], 
                         logger=wandb_logger)
+    resume_ckpt = None
+    if hasattr(cfg, 'resume_from_checkpoint') and cfg.resume_from_checkpoint is not None:
+        resume_ckpt = cfg.resume_from_checkpoint
+        if not os.path.exists(resume_ckpt):
+            raise FileNotFoundError(f"Checkpoint not found: {resume_ckpt}")
+        logger.info(f"Resuming training from checkpoint: {resume_ckpt}")
+    else:
+        logger.info("Starting training from scratch")
 
     logger.info("Starting Training")
     trainer.fit(
         model=lightning_module,
         train_dataloaders=train_dataloader,
         val_dataloaders=val_dataloader,
+        ckpt_path=resume_ckpt, 
     )
 
 
