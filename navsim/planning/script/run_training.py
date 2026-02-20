@@ -16,7 +16,7 @@ from navsim.planning.training.agent_lightning_module import AgentLightningModule
 from navsim.planning.training.dataset import CacheOnlyDataset, Dataset
 from navsim.planning.training.callbacks.wandb_callback import LogConfigCallback
 logger = logging.getLogger(__name__)
-
+from datetime import datetime
 CONFIG_PATH = "config/training"
 CONFIG_NAME = "default_training"
 
@@ -84,7 +84,7 @@ def main(cfg: DictConfig) -> None:
     Main entrypoint for training an agent.
     :param cfg: omegaconf dictionary
     """
-
+    now = datetime.now().strftime("%H:%M-%d-%m-%Y")
     pl.seed_everything(cfg.seed, workers=True)
     logger.info(f"Global Seed set to {cfg.seed}")
 
@@ -132,7 +132,7 @@ def main(cfg: DictConfig) -> None:
     wandb_logger = instantiate(cfg.trainer.logger)
     wandb_callback = LogConfigCallback(cfg)
     checkpoint_callback = instantiate(cfg.checkpoint)
-    checkpoint_callback.dirpath = os.path.join(checkpoint_callback.dirpath, agent.name(), "checkpoints")
+    checkpoint_callback.dirpath = os.path.join(checkpoint_callback.dirpath, agent.name(),cfg.experiment_name, now, "checkpoints")
     checkpoint_callback.filename =  agent.name() + "_" + cfg.experiment_name +"_" + checkpoint_callback.filename
 
     trainer = pl.Trainer(**cfg.trainer.params, 
