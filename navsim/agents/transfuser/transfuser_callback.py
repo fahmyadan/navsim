@@ -133,10 +133,14 @@ class TransfuserCallback(pl.Callback):
             plot = np.zeros((256, 768, 3), dtype=np.uint8)
             plot[:128, :512] = (camera[sample_idx] * 255).astype(np.uint8)[::2, ::2]
 
-            plot[128:, :256] = semantic_map_to_rgb(bev[sample_idx], self._config)
-            plot[128:, 256:512] = semantic_map_to_rgb(pred_bev[sample_idx], self._config)
+            # plot[128:, :256] = semantic_map_to_rgb(bev[sample_idx], self._config)
+            # plot[128:, 256:512] = semantic_map_to_rgb(pred_bev[sample_idx], self._config)
+            gt_bev_rgb = semantic_map_to_rgb(bev[sample_idx], self._config)
+            pred_bev_rgb = semantic_map_to_rgb(pred_bev[sample_idx], self._config)
 
-            agent_states_ = agent_states[sample_idx][agent_labels[sample_idx]]
+            gt_valid_mask = agent_labels[sample_idx] > 0.5
+            # agent_states_ = agent_states[sample_idx][agent_labels[sample_idx]]
+            agent_states_ = agent_states[sample_idx][gt_valid_mask]
             pred_agent_states_ = pred_agent_states[sample_idx][pred_agent_labels[sample_idx] > 0.5]
             # plot[:, 512:] = lidar_map_to_rgb(
             #     lidar_map[sample_idx],
@@ -146,6 +150,27 @@ class TransfuserCallback(pl.Callback):
             #     pred_trajectory[sample_idx],
             #     self._config,
             # )
+            gt_bev_rgb = trajectory_on_bev_to_rgb(
+                gt_bev_rgb,
+                trajectory[sample_idx],
+                # pred_trajectory[sample_idx],
+                np.array([]),
+                agent_states_,
+                np.array([]),
+                # pred_agent_states_,
+                self._config,
+            )
+            pred_bev_rgb = trajectory_on_bev_to_rgb(
+                pred_bev_rgb,
+                trajectory[sample_idx],
+                pred_trajectory[sample_idx],
+                agent_states_,
+                pred_agent_states_,
+                self._config,
+            )
+
+            plot[128:, :256] = gt_bev_rgb
+            plot[128:, 256:512] = pred_bev_rgb
 
             # Add text labels to distinguish GT and predicted
             font = cv2.FONT_HERSHEY_SIMPLEX
@@ -267,4 +292,171 @@ def lidar_map_to_rgb(
         for x, y in trajectory_indices:
             cv2.circle(rgb_map, (y, x), point_size, color, -1)  # -1 fills the circle
 
+    return rgb_map[::-1, ::-1]
+
+# def trajectory_on_bev_to_rgb(
+#     bev_rgb_map: npt.NDArray[np.uint8],
+#     gt_trajectory: npt.NDArray[np.float32],
+#     pred_trajectory: npt.NDArray[np.float32],
+#     gt_agent_states: npt.NDArray[np.float32],
+#     pred_agent_states: npt.NDArray[np.float32],
+#     config: TransfuserConfig,
+# ) -> npt.NDArray[np.uint8]:
+#     """
+#     Overlays GT and predicted trajectories and agent bounding boxes on BEV semantic map.
+#     :param bev_rgb_map: RGB image of BEV semantic map (from semantic_map_to_rgb)
+#     :param gt_trajectory: Ground truth ego trajectory in local coordinates (N, 3) [x, y, heading]
+#     :param pred_trajectory: Predicted ego trajectory in local coordinates (N, 3) [x, y, heading]
+#     :param gt_agent_states: Ground truth agent bounding box states in local coordinates (M, 5) [x, y, heading, length, width]
+#     :param pred_agent_states: Predicted agent bounding box states in local coordinates (K, 5) [x, y, heading, length, width]
+#     :param config: TransfuserConfig with BEV parameters
+#     :return: RGB image with trajectories and bounding boxes overlaid
+#     """
+#     # Make a copy to avoid modifying the original
+#     rgb_map = bev_rgb_map.copy()
+    
+#     # Trajectory colors: GT is RED, predicted is BLUE
+#     gt_traj_color, pred_traj_color = (255, 0, 0), (0, 0, 255)  # RED for GT, BLUE for predicted
+#     # Agent bounding box colors: GT is GREEN, predicted is YELLOW
+#     gt_agent_color, pred_agent_color = (0, 255, 0), (0, 255, 255)  # GREEN for GT, YELLOW for predicted
+#     traj_point_size = 3
+#     agent_box_thickness = 2
+    
+#     height, width = rgb_map.shape[:2]
+    
+#     def coords_to_pixel_bev(coords):
+#         """
+#         Convert local coordinates to pixel indices for BEV semantic map.
+        
+#         The BEV semantic map is created with ego at [row=0, col=width/2] in the original coordinate system.
+#         semantic_map_to_rgb then flips it: rgb_map[::-1, ::-1]
+        
+#         After the flip:
+#         - Row flip: row i -> row (height-1-i)
+#         - Col flip: col j -> col (width-1-j)
+        
+#         So if ego was at [0, width/2] originally, after flip it's at [height-1, width-1-width/2]
+#         But we want ego to appear at top center, so we need to transform coordinates accordingly.
+#         """
+#         # Compute coordinates in original (unflipped) system
+#         # Ego is at [0, width/2] in original system
+#         pixel_center_original = np.array([[0, width / 2.0]])
+#         coords_original = (coords / config.bev_pixel_size) + pixel_center_original
+        
+#         # Transform to flipped coordinate system
+#         # rgb_map[::-1, ::-1] means: new_row = height-1-old_row, new_col = width-1-old_col
+#         coords_flipped = np.zeros_like(coords_original)
+#         coords_flipped[:, 0] = height - 1 - coords_original[:, 0]  # Row flip
+#         coords_flipped[:, 1] = width - 1 - coords_original[:, 1]   # Col flip
+        
+#         return coords_flipped.astype(np.int32)
+    
+#     # Draw agent bounding boxes
+#     for color, agent_state_array in zip([gt_agent_color, pred_agent_color], [gt_agent_states, pred_agent_states]):
+#         if len(agent_state_array) == 0:
+#             continue
+#         for agent_state in agent_state_array:
+#             agent_box = OrientedBox(
+#                 StateSE2(*agent_state[BoundingBox2DIndex.STATE_SE2]),
+#                 agent_state[BoundingBox2DIndex.LENGTH],
+#                 agent_state[BoundingBox2DIndex.WIDTH],
+#                 1.0,
+#             )
+#             exterior = np.array(agent_box.geometry.exterior.coords).reshape((-1, 1, 2))
+#             exterior = coords_to_pixel_bev(exterior)
+#             # Convert [row, col] to [col, row] for cv2 (cv2 uses x=col, y=row)
+#             exterior_cv2 = np.flip(exterior, axis=-1)
+#             cv2.polylines(rgb_map, [exterior_cv2], isClosed=True, color=color, thickness=agent_box_thickness)
+    
+#     # Draw trajectories
+#     for color, traj in zip([gt_traj_color, pred_traj_color], [gt_trajectory, pred_trajectory]):
+#         if len(traj) == 0:
+#             continue
+#         # Extract x, y coordinates (first two columns)
+#         trajectory_coords = traj[:, :2]
+#         trajectory_indices = coords_to_pixel_bev(trajectory_coords)
+#         # Convert [row, col] to [col, row] for cv2
+#         trajectory_indices_cv2 = np.flip(trajectory_indices, axis=-1)
+#         for point in trajectory_indices_cv2:
+#             x, y = point[0], point[1]
+#             # Check bounds before drawing
+#             if 0 <= x < width and 0 <= y < height:
+#                 cv2.circle(rgb_map, (x, y), traj_point_size, color, -1)  # -1 fills the circle
+    
+#     return rgb_map
+
+def trajectory_on_bev_to_rgb(
+    bev_rgb_map: npt.NDArray[np.uint8],
+    gt_trajectory: npt.NDArray[np.float32],
+    pred_trajectory: npt.NDArray[np.float32],
+    gt_agent_states: npt.NDArray[np.float32],
+    pred_agent_states: npt.NDArray[np.float32],
+    config: TransfuserConfig,
+) -> npt.NDArray[np.uint8]:
+    """
+    Overlays GT and predicted trajectories and agent bounding boxes on BEV semantic map.
+    """
+    # 1. UN-FLIP the incoming map so we are drawing in the true coordinate space
+    rgb_map = bev_rgb_map[::-1, ::-1].copy()
+    
+    gt_traj_color, pred_traj_color = (255, 0, 0), (0, 0, 255)  # RED GT, BLUE Pred
+    gt_agent_color, pred_agent_color = (0, 255, 0), (0, 255, 255)  # GREEN GT, YELLOW Pred
+    traj_point_size = 3
+    agent_box_thickness = 2
+    
+    height, width = rgb_map.shape[:2]
+    
+    def coords_to_pixel_bev(coords):
+        # 2. FIX ORIGIN: Ego is in the center of the spatial grid
+        pixel_center = np.array([[height / 2.0, width / 2.0]])
+        coords_idcs = (coords / config.bev_pixel_size) + pixel_center
+        return coords_idcs.astype(np.int32)
+    
+    ego_color = (255, 255, 255)  # WHITE for Ego vehicle
+    ego_length = 4.08  # Standard nuPlan/Navsim ego vehicle length in meters
+    ego_width = 1.73   # Standard nuPlan/Navsim ego vehicle width in meters
+    
+    ego_box = OrientedBox(
+        StateSE2(0.0, 0.0, 0.0),
+        ego_length,
+        ego_width,
+        1.0,
+    )
+    ego_exterior = np.array(ego_box.geometry.exterior.coords).reshape((-1, 1, 2))
+    ego_exterior_pixels = coords_to_pixel_bev(ego_exterior)
+    ego_exterior_cv2 = np.flip(ego_exterior_pixels, axis=-1)  # [row, col] -> [x, y]
+    
+    # Fill the ego box so it stands out strongly against the map
+    cv2.fillPoly(rgb_map, [ego_exterior_cv2], color=ego_color)
+    cv2.polylines(rgb_map, [ego_exterior_cv2], isClosed=True, color=(0, 0, 0), thickness=1)
+    # Draw agent bounding boxes
+    for color, agent_state_array in zip([gt_agent_color, pred_agent_color], [gt_agent_states, pred_agent_states]):
+        if len(agent_state_array) == 0:
+            continue
+        for agent_state in agent_state_array:
+            agent_box = OrientedBox(
+                StateSE2(*agent_state[BoundingBox2DIndex.STATE_SE2]),
+                agent_state[BoundingBox2DIndex.LENGTH],
+                agent_state[BoundingBox2DIndex.WIDTH],
+                1.0,
+            )
+            exterior = np.array(agent_box.geometry.exterior.coords).reshape((-1, 1, 2))
+            exterior = coords_to_pixel_bev(exterior)
+            exterior_cv2 = np.flip(exterior, axis=-1)  # Convert [row, col] to [col, row] for cv2
+            cv2.polylines(rgb_map, [exterior_cv2], isClosed=True, color=color, thickness=agent_box_thickness)
+    
+    # Draw trajectories
+    for color, traj in zip([gt_traj_color, pred_traj_color], [gt_trajectory, pred_trajectory]):
+        if len(traj) == 0:
+            continue
+        trajectory_coords = traj[:, :2]
+        trajectory_indices = coords_to_pixel_bev(trajectory_coords)
+        trajectory_indices_cv2 = np.flip(trajectory_indices, axis=-1)
+        
+        for point in trajectory_indices_cv2:
+            x, y = point[0], point[1]
+            if 0 <= x < width and 0 <= y < height:
+                cv2.circle(rgb_map, (x, y), traj_point_size, color, -1)
+    
+    # 3. RE-FLIP the final image so the ego vehicle faces "up" for human viewing
     return rgb_map[::-1, ::-1]
