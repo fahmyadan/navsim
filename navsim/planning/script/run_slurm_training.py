@@ -275,8 +275,32 @@ def main(cfg: DictConfig) -> None:
     # --- TRAINER & WANDB SETUP ---
     
     # 1. Determine Resume Checkpoint
-    resume_ckpt = find_resume_checkpoint(checkpoint_callback.dirpath, is_requeued)
-    
+    # resume_ckpt = find_resume_checkpoint(checkpoint_callback.dirpath, is_requeued)
+    resume_ckpt = None
+    if is_requeued:
+        if not os.path.exists(checkpoint_callback.dirpath):
+            raise RuntimeError(
+                f"Job requeued but checkpoint directory does not exist: {checkpoint_callback.dirpath}. "
+                f"This suggests the job was preempted before any checkpoints were saved."
+            )
+        resume_ckpt = find_resume_checkpoint(checkpoint_callback.dirpath, is_requeued)
+        if resume_ckpt:
+            logger.info(f"Job requeued: Auto-detected checkpoint for resume: {resume_ckpt}")
+        else:
+            logger.warning(f"Job requeued but no checkpoint found in {checkpoint_callback.dirpath}")
+    else:
+        if hasattr(cfg, 'resume_from_checkpoint') and cfg.resume_from_checkpoint is not None:
+            resume_ckpt = cfg.resume_from_checkpoint
+            if not os.path.exists(resume_ckpt):
+                raise FileNotFoundError(f"Checkpoint not found: {resume_ckpt}")
+            logger.info(f"First run: Resuming from explicit checkpoint: {resume_ckpt}")
+        else:
+            # No explicit checkpoint: try auto-detection (useful for continuing existing experiments)
+            resume_ckpt = find_resume_checkpoint(checkpoint_callback.dirpath, is_requeued)
+            if resume_ckpt:
+                logger.info(f"First run: Auto-detected checkpoint for resume: {resume_ckpt}")
+            else:
+                logger.info("First run: Starting training from scratch")
     # 2. Configure Logger
     wandb_logger = None
     callbacks = [*agent.get_training_callbacks(), checkpoint_callback]
