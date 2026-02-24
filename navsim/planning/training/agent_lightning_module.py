@@ -37,8 +37,9 @@ class AgentLightningModule(pl.LightningModule):
         :return: scalar loss
         """
         features, targets = batch
-        prediction = self.agent.forward(features)
-        loss, loss_dict = self.agent.compute_loss(features, targets, prediction)
+        prediction = self.agent.forward(features, targets)
+        loss_dict = self.agent.compute_loss(features, targets, prediction)
+        loss= loss_dict['loss']
         is_training = (logging_prefix == "train")
         self.log(f"{logging_prefix}/loss", loss, on_step=is_training, on_epoch=True, prog_bar=True, sync_dist=True)
         for name, val in loss_dict.items():
